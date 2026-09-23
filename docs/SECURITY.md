@@ -9,7 +9,7 @@
 | 项 | 存放 | 说明 |
 |---|---|---|
 | `API_KEY` | `.env` | 对外推理接口的密钥，客户端带 `Authorization: Bearer <它>` |
-| `ADMIN_KEY` | `.env` 或 `data/.admin_key` | 管理端密钥。不设则首次启动自动生成 |
+| `ADMIN_KEY` | `.env` 或环境变量 | 管理端密钥。**必填**，不设会拒绝启动（不再自动生成） |
 | `SECRET_KEY` | `.env` 或 `data/.secret_key` | **凭证加密主密钥**。丢失 = 已存账号全部不可恢复 |
 | 账号凭证 | `data/credentials.enc` | AEAD 加密后落盘，权限 0600 |
 

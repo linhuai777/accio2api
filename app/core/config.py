@@ -10,10 +10,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
+
+log = logging.getLogger("accio2api.config")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -351,17 +354,32 @@ class Settings:
                 " 凭证加密强度取决于它。生成一个："
                 "python -c \"import secrets;print(secrets.token_urlsafe(32))\"")
 
-        ak_file = self.data_dir / ".admin_key"
+        # ── ADMIN_KEY：不再自动生成 ──────────────────────────────
+        # 设计变更（执剑人 2026-09-23 指定）：
+        #   旧行为：ADMIN_KEY 留空 → 首次启动自动生成到 data/.admin_key。
+        #   问题  ：用户根本不知道密钥长什么样，得进服务器 cat 文件才知道，
+        #          而且「自动生成」给人一种「已经配置好了」的错觉。
+        #   新行为：ADMIN_KEY 必须由部署者显式设定（写进 .env 或环境变量）。
+        #          没设就拒绝启动，并把生成命令打出来。
+        #
+        #   向后兼容：若 data/.admin_key 已存在（老部署残留），仍读取它，
+        #           但打一条警告提示尽快迁移到 .env。
         if not self.admin_key:
+            ak_file = self.data_dir / ".admin_key"
             if ak_file.exists():
-                self.admin_key = ak_file.read_text().strip()
-            else:
-                self.admin_key = "sk-admin-" + secrets.token_urlsafe(24)
-                ak_file.write_text(self.admin_key)
-                try:
-                    ak_file.chmod(0o600)
-                except OSError:
-                    pass
+                legacy = ak_file.read_text().strip()
+                if legacy:
+                    self.admin_key = legacy
+                    log.warning(
+                        "ADMIN_KEY 来自旧版遗留文件 %s —— 建议改为写进 .env"
+                        "（该文件内容：%s）", ak_file, legacy)
+            if not self.admin_key:
+                raise RuntimeError(
+                    "ADMIN_KEY 未设置。管理后台 /admin 需要一个你自己定的密钥。\n"
+                    "  生成一个并写入 .env：\n"
+                    "    python -c \"import secrets;print('sk-admin-'+secrets.token_urlsafe(24))\"\n"
+                    "  然后加一行到 .env：  ADMIN_KEY=<上面输出的值>\n"
+                    "  或者重新运行向导：    python setup.py")
 
     @property
     def credentials_dir(self) -> Path:

@@ -17,6 +17,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# ADMIN_KEY 现在必填（不再自动生成）。测试自带一把，避免 import 时被拒。
+os.environ.setdefault("ADMIN_KEY", "sk-admin-test-key-for-unit-tests")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-32-chars-minimum-000000")
+os.environ.setdefault("DATA_DIR", "/tmp/.accio2api-test-data")
+
 from app.core import persona                                    # noqa: E402
 
 PASS = FAIL = 0

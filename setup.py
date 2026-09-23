@@ -256,15 +256,25 @@ def build_env(c: dict) -> str:
     a("")
 
     a("# ── 密钥 ──────────────────────────────────────────────")
+    a("# ⚠️ 这两个密钥都由你掌控，不会自动生成。改完重启服务生效。")
+    a("")
     a("# API_KEY：任何 OpenAI 客户端 / New API 渠道填这个。")
-    a(f"API_KEY={c['api_key']}")
-    if c["admin_key"]:
-        a("# ADMIN_KEY：登录 /admin 管理界面用。")
-        a(f"ADMIN_KEY={c['admin_key']}")
+    if c["api_key"]:
+        a(f"API_KEY={c['api_key']}")
+    elif c.get("api_key_mode") == "later":
+        a("# API_KEY：占位符 —— 想启用校验就替换成自己的密钥")
+        a("API_KEY=sk-accio-please-change-me")
     else:
-        a("# ADMIN_KEY：留空 = 首次启动自动生成到 data/.admin_key")
+        a("# API_KEY：留空 = /v1/* 不校验密钥。⚠️ 仅限内网自用；")
+        a("#          公网暴露会变成人人可白嫖的开放代理。")
+        a("API_KEY=")
+    a("")
+    a("# ADMIN_KEY：登录 /admin 后台用。已由你设定，勿泄露。")
+    a(f"ADMIN_KEY={c['admin_key']}")
+    a("")
     a("# SECRET_KEY：凭证加密主密钥。⚠️ 丢失后已存账号全部不可恢复，务必备份。")
-    a("# 留空 = 首次启动自动生成到 data/.secret_key")
+    a("# 留空 = 首次启动自动生成到 data/.secret_key（这个会自动生成，因为它")
+    a("#       只在本机加解密用，不需要你记，反而写进 .env 更易随文件泄漏）。")
     a("")
 
     a("# ── Accio 站点（一般不改）─────────────────────────────")
@@ -366,25 +376,54 @@ def main() -> int:
     c["port"] = ask("端口", default="8000", hint="客户端连的就是这个端口",
                     validate=v_port)
 
-    # ── 对外密钥 ──────────────────────────────────────────
-    section("对外推理密钥 API_KEY")
-    print(dim("   客户端用它访问 /v1/*。留空我会生成一把强的（推荐）。"))
-    if args.yes:
-        c["api_key"] = gen_key()
-    elif ask_yesno("自动生成？", default=True):
-        c["api_key"] = gen_key()
-    else:
-        c["api_key"] = ask("输入你的密钥", validate=lambda s: v_required(s) or v_key(s))
-    print(green("  ✓ ") + mask(c["api_key"]))
-
-    # ── 管理密钥 ──────────────────────────────────────────
+    # ── 管理密钥（必填，不再自动生成）──────────────────────
     section("管理端密钥 ADMIN_KEY")
-    print(dim("   登录 /admin 用。留空 = 首次启动自动生成到 data/.admin_key（推荐）。"))
-    if args.yes or ask_yesno("自动生成？", default=True):
-        c["admin_key"] = ""
-        print(green("  ✓ ") + "留空，启动时自动生成")
+    print(dim("   登录 /admin 后台用。必须自己定，不再自动生成。"))
+    print(dim("   至少 16 位；建议用一串随机字符，别用生日/手机号。"))
+    if args.yes:
+        # --yes 无人值守模式：没有交互就不能「让用户输入」，
+        # 此时回退为生成并写入 .env（明确告知，不留悬念）。
+        c["admin_key"] = "sk-admin-" + secrets.token_urlsafe(24)
+        print(green("  ✓ ") + "--yes 模式：已生成管理密钥并写入 .env")
+        print("    " + bold(c["admin_key"]))
     else:
-        c["admin_key"] = ask("输入你的密钥", validate=lambda s: v_required(s) or v_key(s))
+        while True:
+            k = ask("设定管理密钥", hint="留空则帮你生成一把强的",
+                    validate=lambda s: "" if not s or len(s) >= 16
+                    else "太短了，至少 16 位（或直接回车让我生成）")
+            if k:
+                c["admin_key"] = k
+                break
+            # 用户选择「帮我生成」——此时必须当场显示，因为不再落盘到 data/
+            c["admin_key"] = "sk-admin-" + secrets.token_urlsafe(24)
+            print()
+            print(green("  已生成，请立刻抄下来："))
+            print("    " + bold(c["admin_key"]))
+            print(dim("    （也可以稍后在服务器上 cat .env 查看）"))
+            break
+    print(green("  ✓ ") + mask(c["admin_key"]))
+
+    # ── 对外推理密钥（三选一，不默认生成）──────────────────
+    section("对外推理密钥 API_KEY")
+    print(dim("   客户端用它访问 /v1/*。不填 = 该接口不校验密钥（仅限内网自用）。"))
+    c["api_key"] = ask_choice("对外推理密钥怎么定", [
+        ("none", "不设置 —— /v1/* 不校验密钥（内网自用；公网暴露请勿选）"),
+        ("gen", "生成一把强密钥，现在显示给我复制"),
+        ("later", "先不管 —— 留占位符，之后进终端自己改 .env"),
+    ], default=2)
+    c["api_key_mode"] = c["api_key"]
+    if c["api_key"] == "gen":
+        c["api_key"] = gen_key()
+        c["api_key_mode"] = "gen"
+        print()
+        print(green("  已生成，请立刻抄下来："))
+        print("    " + bold(c["api_key"]))
+    elif c["api_key"] == "later":
+        c["api_key"] = ""
+        print(dim("   → .env 里将写入占位符，等你手动替换"))
+    else:
+        c["api_key"] = ""
+        print(dim("   → 不校验密钥。公网部署请重新运行向导。"))
 
     # ── 验证码后端 ────────────────────────────────────────
     section("验证码怎么取")
@@ -457,8 +496,12 @@ def main() -> int:
     section("确认")
     rows = {
         "端口": c["port"],
-        "API_KEY": mask(c["api_key"]),
-        "ADMIN_KEY": "自动生成" if not c["admin_key"] else mask(c["admin_key"]),
+        "ADMIN_KEY": mask(c["admin_key"]),
+        "API_KEY": {
+            "gen": mask(c["api_key"]),
+            "later": "占位符（待手动替换）",
+            "none": "未设置（/v1/* 不校验）",
+        }.get(c.get("api_key_mode"), mask(c["api_key"])),
         "取码方式": c["otp"],
         "别名池": ("是" if c["alias"] else "否"),
         "访问方式": (f"https://{c['domain']}"
@@ -496,7 +539,7 @@ def main() -> int:
     print(bold("  下一步"))
     print(f"    启动      {cyan('docker compose up -d')}")
     print(f"    管理界面  {cyan(f'http://localhost:{port}/admin')}")
-    print(f"    登录密钥  {dim('cat data/.admin_key')}")
+    print(f"    登录密钥  {dim('cat .env | grep ADMIN_KEY')}")
     if c["domain"]:
         print()
         print(red("  ⚠️ 暴露公网前请务必："))

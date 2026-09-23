@@ -56,10 +56,11 @@ curl http://localhost:8000/v1/chat/completions \
   -d '{"model":"deepseek-v4.1","messages":[{"role":"user","content":"hi"}]}'
 ```
 
-打开 `http://localhost:8000/admin`，用 `data/.admin_key` 里的密钥登录，然后加账号。
+打开 `http://localhost:8000/admin`，用你在 `.env` 里设定的 `ADMIN_KEY` 登录，然后加账号。
 
-> 首次启动会自动生成 `ADMIN_KEY` 与 `SECRET_KEY` 存到 `data/`（权限 0600）。
-> **`SECRET_KEY` 决定凭证能否解密 —— 务必备份，丢了已存账号全部不可恢复。**
+> **`ADMIN_KEY` 必须自己设定**（写进 `.env`），没设会拒绝启动 —— 不再自动生成。
+> `SECRET_KEY` 仍会自动生成到 `data/.secret_key`（权限 0600）。
+> **它决定凭证能否解密 —— 务必备份，丢了已存账号全部不可恢复。**
 
 <details>
 <summary><b>裸机运行 / 不用 Docker</b></summary>
@@ -222,7 +223,7 @@ git checkout -- .
 | 变量 | 说明 |
 |---|---|
 | `API_KEY` | 客户端访问 `/v1/*` 的密钥。**不设则接口不校验密钥**，生产必须设 |
-| `ADMIN_KEY` | 登录 `/admin` 的密钥。不设则首次启动自动生成到 `data/.admin_key` |
+| `ADMIN_KEY` | 登录 `/admin` 的密钥。**必填**，不设会拒绝启动（不再自动生成） |
 | `SECRET_KEY` | 凭证加密主密钥。**务必单独备份**，丢了已存账号全部不可恢复 |
 | `OTP_BACKEND` | `cloudmail` / `imap` / `manual`，见 [docs/EMAIL.md](docs/EMAIL.md) |
 | `ALLOWED_HOSTS` | Host 头白名单（防 DNS rebinding）。**默认不启用**；绑域名部署时设为你的域名，支持 `*.your.domain` |

@@ -19,6 +19,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# ADMIN_KEY 现在必填（不再自动生成）。测试自带一把，避免 import 时被拒。
+import os  # noqa: E402
+os.environ.setdefault("ADMIN_KEY", "sk-admin-test-key-for-unit-tests")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-32-chars-minimum-000000")
+os.environ.setdefault("DATA_DIR", "/tmp/.accio2api-test-data")
+
 from app.auth import otp  # noqa: E402
 from app.auth.alias import MailIdentity  # noqa: E402
 
