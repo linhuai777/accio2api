@@ -1,0 +1,49 @@
+services:
+  accio2api:
+    build: .
+    image: accio2api:latest
+    container_name: accio2api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # ── 服务 ──────────────────────────────────────────
+      HOST: 0.0.0.0
+      PORT: 8000
+      LOG_LEVEL: info
+      DATA_DIR: /data
+
+      # ── 密钥（首次启动会自动生成到 /data/.admin_key 与 /data/.secret_key）
+      # ADMIN_KEY: sk-admin-xxxxxxxx
+      # SECRET_KEY: xxxxxxxx           # 凭证加密密钥，务必固定保存
+
+      # ── 对外推理密钥：New API 里填这个
+      API_KEY: ${API_KEY:-}
+
+      # ── Accio 站点（一般不用改）
+      ACCIO_BASE_URL: https://www.accio.com
+
+      # ── 浏览器（自动注册 / 网页登录必需）
+      BROWSER_ENABLED: "true"
+      BROWSER_HEADLESS: "true"
+
+      # ── 验证码后端：cloudmail | imap | manual
+      OTP_BACKEND: ${OTP_BACKEND:-cloudmail}
+
+      # CloudMail 配置（OTP_BACKEND=cloudmail 时生效）
+      CLOUDMAIL_BASE: ${CLOUDMAIL_BASE:-}
+      CLOUDMAIL_TOKEN: ${CLOUDMAIL_TOKEN:-}
+      CLOUDMAIL_EMAIL: ${CLOUDMAIL_EMAIL:-}
+      CLOUDMAIL_PASSWORD: ${CLOUDMAIL_PASSWORD:-}
+      CLOUDMAIL_DOMAIN: ${CLOUDMAIL_DOMAIN:-}
+
+      # IMAP 配置（OTP_BACKEND=imap 时生效）
+      IMAP_HOST: ${IMAP_HOST:-}
+      IMAP_PORT: ${IMAP_PORT:-993}
+      IMAP_USER: ${IMAP_USER:-}
+      IMAP_PASSWORD: ${IMAP_PASSWORD:-}
+      IMAP_SSL: ${IMAP_SSL:-1}
+    volumes:
+      - ./data:/data
+    # Chromium 需要更大的共享内存
+    shm_size: "1gb"

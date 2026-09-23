@@ -1,0 +1,14 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+requests>=2.31.0
+websocket-client>=1.7.0
+cryptography>=42.0.0
+playwright>=1.40.0
+python-multipart>=0.0.9
+
+# ── 安全下限（pip-audit 2026-09-23 扫描结果）──────────────────
+# anyio 是 FastAPI/Starlette 的传递依赖，4.12.1 存在 2 个已知 CVE：
+#   · CVE-2026-63374  TLS + 国际化域名（本项目不涉及，但应修）
+#   · CVE-2026-64847  进程池 worker stderr 管道未排空
+# 显式钉住下限，避免解析器回退到有漏洞的版本。
+anyio>=4.14.2

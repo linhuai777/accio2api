@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.env
+data/
+*.cred
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# 🔴 审计日志：含 account_key / 上游 URL / 调用详情，禁止入库
+audit/
+*.jsonl
+
+# 🔴 .env 的各类备份（编辑时自动生成），含密钥与代理配置
+.env.bak*
+.env.*.bak
+*.env.bak
+
+# 运行时产物
+.watchdog.pid
+watchdog.pid
+*.pid
