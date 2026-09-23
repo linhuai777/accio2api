@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#0a0d16">
 <title>accio2api · 控制台</title>
+<!-- 内联 SVG 图标：省一次 /favicon.ico 请求，避免控制台 404 噪声 -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%234f8cff'/><text x='16' y='22' font-size='15' font-weight='700' text-anchor='middle' fill='white' font-family='sans-serif'>A2</text></svg>">
 <style>
 /* ══════════════════════════════════════════════════════════════
    设计语言：Deep Teal Grid
@@ -340,7 +342,35 @@ button:disabled{opacity:.42;cursor:not-allowed;transform:none!important}
 /* ═══════════════════════════════════════════════════════════
    Layout — 三栏控制台（侧导航 / 顶栏 / 主区）
    ═══════════════════════════════════════════════════════════ */
+/* ── 登录门 ────────────────────────────────────────────────
+   未通过密钥验证前，整个后台（.app）不渲染、不显示。
+   ⚠️ 这只是体验层：真正的防线是后端每个端点上的 _admin_guard。
+      即使有人用 devtools 强行去掉 .hide，请求仍会被 401 挡住。 */
 .app{display:grid;grid-template-columns:216px 1fr;min-height:100vh;position:relative;z-index:1}
+.app.hide{display:none !important}
+
+#gate{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;
+  justify-content:center;padding:20px;background:var(--bg,#0b0d12)}
+#gate.hide{display:none !important}
+.gate-box{width:100%;max-width:392px;background:rgba(22,26,34,.72);
+  border:1px solid rgba(255,255,255,.09);border-radius:18px;padding:30px 28px 26px;
+  box-shadow:0 24px 64px rgba(0,0,0,.5);backdrop-filter:blur(22px)}
+.gate-logo{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;
+  background:linear-gradient(135deg,#4f8cff,#8b5cf6);color:#fff;font-weight:700;
+  font-size:17px;letter-spacing:.5px;margin-bottom:16px}
+.gate-box h1{font-size:19px;margin:0 0 6px;font-weight:650;color:#eef1f7}
+.gate-box .gate-sub{font-size:12.5px;color:#8b93a5;line-height:1.6;margin:0 0 20px}
+.gate-field{display:flex;gap:8px}
+.gate-field input{flex:1;min-width:0}
+.gate-err{color:#ff6b6b;font-size:12.5px;margin-top:10px;min-height:16px;
+  line-height:1.5;word-break:break-word}
+.gate-hint{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07);
+  font-size:11.5px;color:#6b7385;line-height:1.7}
+.gate-hint code{background:rgba(255,255,255,.07);padding:1px 5px;border-radius:4px;
+  font-size:11px;color:#a9b4c9}
+@keyframes gateShake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-7px)}
+  40%,80%{transform:translateX(7px)}}
+.gate-box.err{animation:gateShake .38s}
 
 .side{
   border-right:1px solid var(--line);
@@ -629,7 +659,26 @@ button.sm{padding:5px 11px;font-size:11.5px}
 <body>
 <div class="bg"><i></i><i></i><i></i></div>
 
-<div class="app">
+<!-- ══ 登录门：验证通过前不显示后台 ══ -->
+<div id="gate">
+  <div class="gate-box" id="gateBox">
+    <div class="gate-logo">A2</div>
+    <h1>管理员登录</h1>
+    <p class="gate-sub">请输入管理密钥以进入控制台。</p>
+    <div class="gate-field">
+      <input id="gateKey" type="password" placeholder="sk-admin-…"
+             autocomplete="current-password" spellcheck="false">
+      <button class="primary" id="gateBtn" onclick="gateSubmit()">登录</button>
+    </div>
+    <div class="gate-err" id="gateErr"></div>
+    <div class="gate-hint">
+      密钥保存在浏览器本地，不随请求外发。<br>
+      忘记密钥？在服务器上执行 <code>cat data/.admin_key</code>
+    </div>
+  </div>
+</div>
+
+<div class="app hide" id="app">
   <!-- ── 左侧导航 ── -->
   <aside class="side">
     <div class="brand">
@@ -683,14 +732,12 @@ button.sm{padding:5px 11px;font-size:11.5px}
       </div>
     </div>
 
-    <!-- 管理密钥 -->
+    <!-- 会话操作 -->
     <div class="card glass" id="keyCard">
-      <h2><span class="ico">▣</span>管理密钥</h2>
-      <p class="desc">保存在浏览器本地，不随请求外发。首次使用请从服务器的
-        <code>data/.admin_key</code> 读取。</p>
+      <h2><span class="ico">▣</span>会话</h2>
+      <p class="desc">当前已通过管理密钥验证。密钥仅存于本浏览器，不随请求外发。</p>
       <div class="row">
-        <input id="adminKey" type="password" placeholder="sk-admin-…" style="flex:1;min-width:220px">
-        <button class="primary" onclick="saveKey()">保存并连接</button>
+        <button class="ghost" onclick="lockout('已退出登录')">退出登录</button>
       </div>
     </div>
 
@@ -844,7 +891,6 @@ button.sm{padding:5px 11px;font-size:11.5px}
     <input id="regEmail" placeholder="xxx@your-domain.com" style="max-width:420px">
     <div class="row" style="margin-top:14px">
       <button class="primary" onclick="doRegister()" id="btnReg">开始注册</button>
-      <span class="hint" style="margin:0">预计 30–90 秒</span>
     </div>
     <div class="log" id="regLog"></div>
   </div>
@@ -928,10 +974,72 @@ _m_h5_tk=...; cookie2=...; xman_t=...'></textarea>
 /* ══════════════════════════════════════════════════════════
    基础
    ══════════════════════════════════════════════════════════ */
+/* 密钥来源：仅 localStorage。绝不放 URL / 绝不放全局变量以外的可枚举位置。
+   ⚠️ 前端一切判断都只是体验层；后端 27 个端点各自校验，绕不过。 */
 let KEY = localStorage.getItem('accio_admin_key') || '';
+let UNLOCKED = false;   // 是否已通过后端验证
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, m =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+/* ── 登录门 ─────────────────────────────────────────────── */
+function gateErr(msg){
+  $('gateErr').textContent = msg || '';
+  if(msg){ const b = $('gateBox'); b.classList.remove('err');
+           void b.offsetWidth; b.classList.add('err'); }
+}
+/** 用候选密钥向后端做一次真实鉴权探测。返回 true/false。
+ *  这是唯一的「通行判定」——不看前端任何本地标记。 */
+async function gateProbe(key){
+  try{
+    const r = await fetch('/admin/api/overview',
+      {headers:{'Authorization':'Bearer ' + key}});
+    return r.ok;
+  }catch(_){ return false; }
+}
+async function gateSubmit(){
+  const key = $('gateKey').value.trim();
+  const btn = $('gateBtn');
+  if(!key){ return gateErr('请输入管理密钥'); }
+  btn.disabled = true; btn.textContent = '验证中…'; gateErr('');
+  const ok = await gateProbe(key);
+  btn.disabled = false; btn.textContent = '登录';
+  if(!ok){
+    localStorage.removeItem('accio_admin_key');
+    KEY = ''; UNLOCKED = false;
+    return gateErr('密钥无效，请检查后重试');
+  }
+  KEY = key;
+  localStorage.setItem('accio_admin_key', key);
+  unlock();
+}
+/** 通过验证 → 撤门、渲染后台、拉数据。 */
+function unlock(){
+  UNLOCKED = true;
+  $('gate').classList.add('hide');
+  $('app').classList.remove('hide');
+  const h = (location.hash || '').slice(1);
+  tab(PANELS.includes(h) ? h : 't0');
+  ping(); loadProxies(); loadPgModels();
+}
+/** 会话失效（任何请求返回 401）→ 收回后台，重新要求密钥。
+ *  防止密钥被撤销/轮换后，旧标签页继续显示敏感数据。 */
+function lockout(msg){
+  if(!UNLOCKED) return;
+  UNLOCKED = false;
+  KEY = '';
+  localStorage.removeItem('accio_admin_key');
+  $('app').classList.add('hide');
+  $('gate').classList.remove('hide');
+  $('gateKey').value = '';
+  $('gateErr').textContent = msg || '登录已失效，请重新输入密钥';
+}
+if(!KEY){
+  document.addEventListener('DOMContentLoaded', ()=>$('gateKey').focus());
+}else{
+  // 有本地密钥：先静默探活，通过才渲染后台；失败也不自动放行
+  //（放在脚本末尾执行，此时 DOM 已就绪）
+}
 
 function toast(msg, kind=''){
   const t = $('toast');
@@ -960,23 +1068,24 @@ async function jfetch(path, opts = {}){
   return body;
 }
 
-const api = (path, opts = {}) => fetch(path, {
-  ...opts,
-  headers: {'Content-Type':'application/json',
-            'Authorization':'Bearer ' + KEY, ...(opts.headers || {})}
-});
+/* 所有管理请求的统一入口。
+   ⚠️ 401 = 后端认定密钥无效/被轮换 → 立即收回后台界面，要求重新登录。
+      这样即使有人在 devtools 里手动改 UNLOCKED，下一个请求照样会被踢回门。 */
+const api = async (path, opts = {}) => {
+  const r = await fetch(path, {
+    ...opts,
+    headers: {'Content-Type':'application/json',
+              'Authorization':'Bearer ' + KEY, ...(opts.headers || {})}
+  });
+  if(r.status === 401) lockout('密钥已失效或被轮换，请重新登录');
+  return r;
+};
 
 /* ── 密钥 ── */
-async function saveKey(){
-  KEY = $('adminKey').value.trim();
-  localStorage.setItem('accio_admin_key', KEY);
-  if(await ping()) toast('已连接', 'ok');
-}
-
 async function ping(){
   try{
     const r = await api('/admin/api/overview');
-    if(!r.ok){ toast('管理密钥无效', 'err'); return false; }
+    if(!r.ok) return false;   // 401 已由 api() 触发 lockout，这里不再重复提示
     const d = (await r.json()).data;
     // 侧栏底部状态（顶栏芯片已由 loadDashboard 填充）
     $('ftProxy').textContent = (d.proxy_count || 0) + ' 出口';
@@ -1787,18 +1896,26 @@ async function probeProxies(){
 /* ══════════════════════════════════════════════════════════
    启动
    ══════════════════════════════════════════════════════════ */
-$('adminKey').value = KEY;
 (async () => {
-  if(KEY && await ping()){
-    // 从 URL hash 恢复页面（支持刷新保持 / 深链分享）
-    const h = (location.hash || '').slice(1);
-    tab(PANELS.includes(h) ? h : 't0');
-    loadProxies();
-    loadPgModels();
-  } else if(KEY){
-    toast('密钥无效，请重新填写', 'err');
+  $('gateKey').value = KEY;
+  if(KEY && await gateProbe(KEY)){
+    // 本地有有效密钥 → 直接进（免二次输入）
+    unlock();
+  }else{
+    // 无密钥 / 密钥失效 → 停在门口，后台保持隐藏
+    if(KEY){ localStorage.removeItem('accio_admin_key'); KEY = ''; }
+    $('gate').classList.remove('hide');
+    $('app').classList.add('hide');
+    $('gateKey').focus();
   }
 })();
+
+// 门上回车即提交
+document.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && !$('gate').classList.contains('hide')){
+    e.preventDefault(); gateSubmit();
+  }
+});
 </script>
 </body>
 </html>
