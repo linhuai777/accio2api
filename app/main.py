@@ -166,6 +166,26 @@ def _startup():
     if not settings.api_key:
         log.warning("  API_KEY 未设置 —— /v1/* 对外接口将不校验密钥。"
                     "生产环境请在 .env 中设置 API_KEY。")
+
+    # 🔴 公开示例密钥检测：本仓库的 .env.example / docker-compose.yml 里
+    #    带了开箱可用的示例密钥（ADMIN_KEY=test 等），方便快速测试。
+    #    但如果部署方 clone 后没改就直接上公网，等于门户大开 ——
+    #    示例值全世界都能在 GitHub 上看到。
+    #    这里**不阻止启动**（测试场景需要它），只把警告打在启动日志最显眼处。
+    _SAMPLE_KEYS = {"test", "sk-accio-please-change-me",
+                    "sk-9Nh77kKgVaQHr2BrK8HDgWU3Oz1r9W41LaGmoKntkyUjYKXA"}
+    if (settings.admin_key or "") in _SAMPLE_KEYS:
+        log.warning("=" * 62)
+        log.warning("  ⚠️  正在使用【公开示例】ADMIN_KEY —— 任何人都能登录 /admin！")
+        log.warning("      该值写在公开仓库的 .env.example 里，仅用于测试。")
+        log.warning("      正式部署请改 .env：")
+        log.warning("        python -c \"import secrets;print('sk-admin-'"
+                    "+secrets.token_urlsafe(24))\"")
+        log.warning("=" * 62)
+    if (settings.api_key or "") in _SAMPLE_KEYS:
+        log.warning("  ⚠️  正在使用【公开示例】API_KEY —— 会被别人拿去白嫖配额。"
+                    "正式部署请改 .env。")
+
     # 🔴 不回显密钥本身，只给指纹（前 8 位 sha256）。
     #    原写法 `admin_key[:12]` 对自动生成的 41 字符密钥无碍（暴露 3 个
     #    随机字符 ≈ 残留 174 bit），但**部署方可能自定义短密钥** ——

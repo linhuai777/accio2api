@@ -119,13 +119,20 @@ def main():
     check(".env.example 提示 ADMIN_KEY 必填", "必填" in ex)
 
     dc = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    check("docker-compose 强制 ADMIN_KEY（:? 语法）", "${ADMIN_KEY:?" in dc)
+    # 设计变更（执剑人 2026-09-23）：仓库内置测试凭据，compose 用 :-test 默认值
+    # 保证 clone 后 docker compose up 即可用。不再是 :? 强制校验。
+    check("docker-compose 带 ADMIN_KEY 默认值（开箱可用）",
+          "${ADMIN_KEY:-" in dc)
+    check("docker-compose 注明默认值是公开示例",
+          "公开示例" in dc or "测试" in dc)
 
     rm = (ROOT / "README.md").read_text(encoding="utf-8")
     check("README 不再指向 data/.admin_key",
           "用 `data/.admin_key` 里的密钥" not in rm)
+    check("README 显著警告示例密钥不可用于生产",
+          "公开示例" in rm and "必须" in rm)
 
-    # ── 7. 向导三选一逻辑 ─────────────────────────────────
+    # ── 7. 向导三态 ─────────────────────────────────────
     print("\n  ── 7. 向导三态 ──")
     sp = (ROOT / "setup.py").read_text(encoding="utf-8")
     check("选项1 不设置", '("none"' in sp)
@@ -134,6 +141,17 @@ def main():
     check("用 api_key_mode 区分空值的两种含义", "api_key_mode" in sp)
     check("ADMIN_KEY 在向导里强制输入/生成（无「留空=自动生成」）",
           "留空 = 首次启动自动生成到 data/.admin_key" not in sp)
+
+    # ── 8. 仓库内置测试凭据（执剑人指定）───────────────────
+    print("\n  ── 8. 内置测试凭据 ──")
+    check(".env.example 的 ADMIN_KEY 默认值为 test",
+          "ADMIN_KEY=test" in ex, ex[ex.find("ADMIN_KEY="):][:40])
+    _TARGET_API = "sk-9Nh77kKgVaQHr2BrK8HDgWU3Oz1r9W41LaGmoKntkyUjYKXA"
+    check(".env.example 的 API_KEY 为指定值", _TARGET_API in ex)
+    check("docker-compose 的 ADMIN_KEY 默认值为 test", "${ADMIN_KEY:-test}" in dc)
+    check("docker-compose 的 API_KEY 为指定值", _TARGET_API in dc)
+    check("启动时会检测示例密钥并告警",
+          "_SAMPLE_KEYS" in (ROOT / "app" / "main.py").read_text(encoding="utf-8"))
 
     print("\n" + "=" * 66)
     print(f"  {'✅ 全部通过' if FAIL == 0 else '🔴 有失败'} {PASS}/{PASS + FAIL}")

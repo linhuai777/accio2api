@@ -13,16 +13,18 @@ services:
       LOG_LEVEL: info
       DATA_DIR: /data
 
-      # ── 密钥 ────────────────────────────────────────────
-      # ADMIN_KEY【必填】：登录 /admin 后台用，没设会拒绝启动（不再自动生成）。
-      #   生成：python -c "import secrets;print('sk-admin-'+secrets.token_urlsafe(24))"
-      ADMIN_KEY: ${ADMIN_KEY:?ADMIN_KEY 未设置 —— 请在 .env 里填写管理密钥}
+      # ── 密钥（⚠️ 下列默认值均为公开示例值，生产前必须改）──────
+      # ADMIN_KEY：登录 /admin 后台用。没设会拒绝启动（不再自动生成）。
+      #   默认 "test" 仅为开箱可用；正式部署务必换成自己的：
+      #   python -c "import secrets;print('sk-admin-'+secrets.token_urlsafe(24))"
+      ADMIN_KEY: ${ADMIN_KEY:-test}
 
       # SECRET_KEY：凭证加密密钥，留空自动生成到 /data/.secret_key，务必固定保存
       # SECRET_KEY: xxxxxxxx
 
       # ── 对外推理密钥：New API 里填这个（留空 = /v1/* 不校验）
-      API_KEY: ${API_KEY:-}
+      #   默认值为公开示例，生产前必须替换
+      API_KEY: ${API_KEY:-sk-9Nh77kKgVaQHr2BrK8HDgWU3Oz1r9W41LaGmoKntkyUjYKXA}
 
       # ── Accio 站点（一般不用改）
       ACCIO_BASE_URL: https://www.accio.com

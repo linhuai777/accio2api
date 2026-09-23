@@ -56,9 +56,40 @@ curl http://localhost:8000/v1/chat/completions \
   -d '{"model":"deepseek-v4.1","messages":[{"role":"user","content":"hi"}]}'
 ```
 
-打开 `http://localhost:8000/admin`，用你在 `.env` 里设定的 `ADMIN_KEY` 登录，然后加账号。
+打开 `http://localhost:8000/admin` 登录，然后加账号。
 
-> **`ADMIN_KEY` 必须自己设定**（写进 `.env`），没设会拒绝启动 —— 不再自动生成。
+### 🔑 内置测试凭据（clone 下来即可直接用）
+
+| 用途 | 默认值 |
+|---|---|
+| 管理后台登录 | `test` |
+| 推理接口 `/v1/*` | `sk-9Nh77kKgVaQHr2BrK8HDgWU3Oz1r9W41LaGmoKntkyUjYKXA` |
+
+```bash
+# 例：用默认推理密钥调一次
+curl http://localhost:8000/v1/chat/completions \
+  -H "Authorization: Bearer sk-9Nh77kKgVaQHr2BrK8HDgWU3Oz1r9W41LaGmoKntkyUjYKXA" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"deepseek-v4.1","messages":[{"role":"user","content":"hi"}]}'
+```
+
+> ### 🚨 这两个值是**公开示例**，全世界都能在 GitHub 上看到
+>
+> 它们是**为了方便你 clone 后立刻跑通测试**而内置的。
+> **正式部署（尤其是暴露公网）前必须全部换掉** —— 否则：
+> - `ADMIN_KEY=test` → 任何人都能登录你的 `/admin` 后台
+> - 示例 `API_KEY` → 别人能拿它白嫖你的模型配额
+>
+> ```bash
+> # 换掉（在 .env 里）
+> ADMIN_KEY=$(python -c "import secrets;print('sk-admin-'+secrets.token_urlsafe(24))")
+> API_KEY=$(python -c "import secrets;print('sk-accio-'+secrets.token_urlsafe(24))")
+> # 或者重新跑向导：python setup.py
+> ```
+>
+> 服务启动时若检测到仍在用示例值，会在日志里打醒目警告。
+
+> `ADMIN_KEY` 不设会拒绝启动（不再自动生成）。
 > `SECRET_KEY` 仍会自动生成到 `data/.secret_key`（权限 0600）。
 > **它决定凭证能否解密 —— 务必备份，丢了已存账号全部不可恢复。**
 

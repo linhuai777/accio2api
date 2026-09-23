@@ -73,6 +73,10 @@ def red(s: str) -> str:
     return _c("31", s)
 
 
+def yellow(s: str) -> str:
+    return _c("33", s)
+
+
 def section(title: str) -> None:
     print()
     print(cyan("── ") + bold(title))
@@ -217,11 +221,25 @@ def v_domain(s: str) -> str:
     return "" if _RE_DOMAIN.match(s) else "只填域名，不带协议，例如 api.example.com"
 
 
+# 密钥最短长度。设为 4 是为了允许 "test" 这类测试占位值 ——
+# 生产部署请自行提高，或用下方提示里的命令生成强密钥。
+_MIN_KEY_LEN = 4
+
+
 def v_key(s: str) -> str:
-    """密钥强度：允许留空（留空=自动生成），填了就必须够长。"""
+    """密钥强度：允许留空，填了就要过最低长度。
+
+    ⚠️ 这里只做「防手滑」级别的检查（防止把端口号、邮箱之类的
+       东西误填进来），**不是安全边界**。真正的安全取决于你填的值
+       是否够随机 —— 把 ADMIN_KEY 设成 "test" 意味着任何人都能进后台。
+    """
     if not s:
         return ""
-    return "" if len(s) >= 16 else "太短了，至少 16 位（或直接回车让我生成）"
+    if len(s) < _MIN_KEY_LEN:
+        return f"太短了，至少 {_MIN_KEY_LEN} 位（或直接回车让我生成）"
+    if len(s) < 16:
+        return ""   # 通过，但下面会打警告
+    return ""
 
 
 def gen_key() -> str:
@@ -379,7 +397,7 @@ def main() -> int:
     # ── 管理密钥（必填，不再自动生成）──────────────────────
     section("管理端密钥 ADMIN_KEY")
     print(dim("   登录 /admin 后台用。必须自己定，不再自动生成。"))
-    print(dim("   至少 16 位；建议用一串随机字符，别用生日/手机号。"))
+    print(dim("   建议 16 位以上随机字符，别用生日/手机号。"))
     if args.yes:
         # --yes 无人值守模式：没有交互就不能「让用户输入」，
         # 此时回退为生成并写入 .env（明确告知，不留悬念）。
@@ -389,8 +407,10 @@ def main() -> int:
     else:
         while True:
             k = ask("设定管理密钥", hint="留空则帮你生成一把强的",
-                    validate=lambda s: "" if not s or len(s) >= 16
-                    else "太短了，至少 16 位（或直接回车让我生成）")
+                    validate=v_key)
+            if k and len(k) < 16:
+                print(yellow(f"  ! 密钥只有 {len(k)} 位 —— 仅适合测试。"
+                             "公开仓库/公网部署请换成随机长密钥。"))
             if k:
                 c["admin_key"] = k
                 break
