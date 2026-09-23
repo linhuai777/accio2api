@@ -169,6 +169,49 @@ curl -X POST http://localhost:8000/admin/api/register/batch \
 
 ---
 
+## 更新到最新版
+
+```bash
+cd accio2api
+git pull
+docker compose build          # 不需要 --no-cache，见下方说明
+docker compose up -d
+```
+
+> ⚠️ **不要加 `--no-cache`**。Dockerfile 把依赖安装放在代码拷贝**之前**，
+> 所以只改代码时依赖层会命中缓存，重建只要几秒。加了 `--no-cache` 会连
+> `pip install` 和 Playwright 浏览器一起重装 —— 那才是等好几分钟的原因。
+
+**想改代码免重建**，用 dev 模式（源码挂载进容器）：
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+git pull
+docker compose -f docker-compose.dev.yml restart    # 秒级生效，无需 build
+```
+
+只有在 `requirements.txt` 变化时才需要重新 `build`。
+
+<details>
+<summary><b>不是用 git clone 装的怎么办</b></summary>
+
+如果目录里没有 `.git`（当初下载的压缩包），转成 git 仓库即可，`.env` 与 `data/`
+会被 `.gitignore` 保护、不会被覆盖：
+
+```bash
+cd accio2api
+git init -b main
+git remote add origin https://github.com/linhuai777/accio2api.git
+git fetch --depth 1 origin main
+git reset --soft FETCH_HEAD
+git checkout -- .
+# 之后就能正常 git pull 了
+```
+
+</details>
+
+---
+
 ## 配置
 
 推荐用向导（`python setup.py`）生成，它会只问必选项。要手动改，看 `.env.example`

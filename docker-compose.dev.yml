@@ -1,0 +1,49 @@
+# 开发 / 频繁更新用 —— 把源码挂载进容器，改代码不用重建镜像。
+#
+# 用法：
+#     docker compose -f docker-compose.dev.yml up -d
+#     git pull                              # ← 拉新代码
+#     docker compose -f docker-compose.dev.yml restart   # 秒级生效
+#
+# 和 docker-compose.yml 的区别：
+#   · 挂载 ./app 与 ./static，容器里跑的就是你磁盘上的代码
+#   · 因此 **不需要 build**，git pull 后 restart 即可
+#   · 改了依赖（requirements.txt）才需要 build
+#
+# 生产环境仍建议用 docker-compose.yml（代码打进镜像，不依赖宿主目录）。
+
+services:
+  accio2api:
+    build: .
+    image: accio2api:latest
+    container_name: accio2api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      LOG_LEVEL: info
+      DATA_DIR: /data
+      API_KEY: ${API_KEY:-}
+      ACCIO_BASE_URL: https://www.accio.com
+      BROWSER_ENABLED: "true"
+      BROWSER_HEADLESS: "true"
+      OTP_BACKEND: ${OTP_BACKEND:-cloudmail}
+      CLOUDMAIL_BASE: ${CLOUDMAIL_BASE:-}
+      CLOUDMAIL_TOKEN: ${CLOUDMAIL_TOKEN:-}
+      CLOUDMAIL_EMAIL: ${CLOUDMAIL_EMAIL:-}
+      CLOUDMAIL_PASSWORD: ${CLOUDMAIL_PASSWORD:-}
+      CLOUDMAIL_DOMAIN: ${CLOUDMAIL_DOMAIN:-}
+      IMAP_HOST: ${IMAP_HOST:-}
+      IMAP_PORT: ${IMAP_PORT:-993}
+      IMAP_USER: ${IMAP_USER:-}
+      IMAP_PASSWORD: ${IMAP_PASSWORD:-}
+      IMAP_SSL: ${IMAP_SSL:-1}
+    volumes:
+      - ./data:/data
+      # ↓ 关键：源码挂载。容器里跑的就是你磁盘上的最新代码
+      - ./app:/app/app:ro
+      - ./static:/app/static:ro
+    shm_size: "1gb"
+    # 改代码后按 Ctrl+C 停止，或 docker compose -f docker-compose.dev.yml restart

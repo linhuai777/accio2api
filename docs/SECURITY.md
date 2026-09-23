@@ -100,6 +100,18 @@ PERSONA_DROP_CLIENT_SYSTEM=0
 
 ---
 
+## 运维提示：别被构建输出刷屏
+
+`docker compose build` 会按层输出 `#5 [2/5] RUN pip install ... 101s` 这样的进度。
+这是 Docker BuildKit 自己的行为，与本项目无关。三条建议：
+
+- **不要加 `--no-cache`** —— 依赖层会命中缓存，只改代码时重建只要几秒。
+- 嫌吵就加 `--quiet`：`docker compose build --quiet`，只输出结果。
+- 想彻底免重建：用 `docker-compose.dev.yml`（源码挂载），`git pull` 后
+  `restart` 即可。
+
+---
+
 ## 已知边界
 
 - 上游风控（Baxia）可能随服务端更新调整，登录/注册链路需按现状复验
