@@ -32,8 +32,11 @@ import secrets
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
+
+from tui import ProgressBar, Spinner, run_quiet   # 同目录，见 tui.py
 
 ROOT = Path(__file__).resolve().parent
 ENV_PATH = ROOT / ".env"
@@ -82,10 +85,17 @@ def _read(prompt: str = "") -> str:
     抛的是 EOFError，会带出一整屏 traceback —— 对「配置向导」来说
     这是最差的表现。统一转成 KeyboardInterrupt，由 main() 收成一句
     「已取消，未改动任何文件」。
+
+    注意：异常前先补一个换行。否则提示串会留在最后一行没有终结，
+    后续输出（尤其是报错）会与它粘在一起，读起来像是两条信息叠了。
+    即使 prompt 为空也要补 —— 调用方可能已经把提示单独 print 出去了
+    （见 ask_secret 的管道分支），此时行尾同样悬着。
     """
     try:
         return input(prompt)
     except EOFError:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
         raise KeyboardInterrupt
 
 
@@ -476,8 +486,12 @@ def main() -> int:
         print("     · 反代终结 TLS（本服务不提供 HTTPS）")
         print("     · 再加一层基础认证，别只靠 ADMIN_KEY")
 
-    if args.start or (not args.yes and ask_yesno("\n现在启动服务？", default=False)):
+    if args.start:
         return _start(c["port"])
+    if not args.yes:
+        print()
+        if ask_yesno("现在启动服务？", default=False):
+            return _start(c["port"])
     print()
     return 0
 
@@ -500,6 +514,17 @@ def preflight() -> str | None:
 
 
 def _start(port: int) -> int:
+    """启动服务。
+
+    🔴 这里不把子进程输出直接放到控制台。
+       `docker compose up -d` 首次运行会拉镜像，原始输出有几十到几百行
+       （每层下载、每个容器创建），用户的终端会被刷满，真正的报错反而
+       被淹没。改为：跑的时候只显示一行转圈，**失败时才**回放输出摘要。
+
+       uvicorn 是前台常驻进程，不能用同一套（它会一直输出访问日志）——
+       那种场景用户的预期就是「前台跑着」，日志本来就要看，所以直接交还
+       终端控制权（exec 语义），并明确告诉他怎么停。
+    """
     print()
     reason = preflight()
     if reason:
@@ -508,16 +533,75 @@ def _start(port: int) -> int:
         print(dim("\n  .env 已生成，可稍后在项目目录里手动启动："))
         print("      docker compose up -d")
         return 1
+
     if shutil.which("docker") and (ROOT / "docker-compose.yml").exists():
-        print(dim("  启动 docker compose …\n"))
-        return subprocess.call(["docker", "compose", "up", "-d"])
+        ok, out = run_quiet(
+            ["docker", "compose", "up", "-d"],
+            what="启动容器（首次会拉取镜像，可能要几分钟）",
+            show_output_on="fail", max_lines=20, cwd=ROOT)
+        if not ok:
+            return 1
+        _report_up(port)
+        return 0
+
     if shutil.which("uvicorn"):
-        print(dim("  启动 uvicorn …\n"))
-        return subprocess.call(["uvicorn", "app.main:app",
-                                "--host", "0.0.0.0", "--port", str(port)])
+        print(bold("  启动 uvicorn"))
+        print(dim("    服务日志会直接输出到这里。停止：Ctrl+C"))
+        print()
+        try:
+            return subprocess.call(["uvicorn", "app.main:app",
+                                    "--host", "0.0.0.0", "--port", str(port)],
+                                   cwd=ROOT)
+        except KeyboardInterrupt:
+            print()
+            print(dim("  服务已停止。"))
+            return 0
+
     print(red("  ✗ 既没有 docker 也没有 uvicorn。先装依赖："))
     print("      pip install -r requirements.txt")
     return 1
+
+
+def _report_up(port: int) -> None:
+    """启动后做一次存活探测，再给结论 —— 不让用户自己去猜。
+
+    探测不通过时不谎报「运行中」：容器可能建起来了但应用崩了
+    （端口占用、配置错误、依赖缺失都会这样）。这种情况必须说清楚，
+    并给出查日志的命令，否则用户会对着一个死服务反复试接口。
+    """
+    import urllib.error
+    import urllib.request
+
+    url = f"http://127.0.0.1:{port}/health"
+    ok = False
+    with Spinner("等待服务就绪") as sp:
+        for _ in range(20):                     # 最多等 10 秒
+            try:
+                with urllib.request.urlopen(url, timeout=1) as r:
+                    ok = r.status == 200
+                    break
+            except (urllib.error.URLError, OSError, ValueError):
+                time.sleep(0.5)
+        if ok:
+            sp.done("服务已就绪")
+        else:
+            sp.fail("服务未响应健康检查")
+
+    print()
+    if ok:
+        print(bold("  运行中"))
+        print(f"    管理界面  {cyan(f'http://localhost:{port}/admin')}")
+        print(f"    接口地址  {cyan(f'http://localhost:{port}/v1')}")
+        print(f"    查看日志  {dim('docker compose logs -f')}")
+        print(f"    停止服务  {dim('docker compose down')}")
+    else:
+        print(bold("  容器已启动，但服务没起来"))
+        print(dim("    多半是配置或端口问题。先看日志："))
+        print(f"      {cyan('docker compose logs --tail=100')}")
+        print(dim(f"\n    常见原因："))
+        print(dim(f"      · 端口 {port} 被占用"))
+        print(dim("      · .env 里有拼错的变量名"))
+        print(dim("      · 首次启动需拉依赖，等一会儿再试"))
 
 
 if __name__ == "__main__":
