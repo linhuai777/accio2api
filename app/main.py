@@ -46,18 +46,64 @@ app = FastAPI(
 #    中间件内部通过 app.state.ratelimiter 取实例（startup 时初始化）。
 app.middleware("http")(ratelimit_middleware)
 
-# 🔴 Host 头校验 —— 防 DNS Rebinding。
+# 🔴 Host 头校验 —— 防 DNS Rebinding 的纵深防御。
 #    攻击者把自己的域名解析到本服务 IP，受害者浏览器即可用该域名访问
 #    `/admin`（Host 头是攻击者域名，CORS 拦不住「同源」的 rebinding）。
-#    默认只放行 localhost/127.0.0.1；生产在 .env 设 ALLOWED_HOSTS=域名。
-from starlette.middleware.trustedhost import TrustedHostMiddleware  # noqa: E402
-
+#
+#    但这是**第二道**防线，主防线是 `_admin_guard` 的密钥校验。
+#    默认 `*` 不校验：Host 白名单是精确匹配，用 IP 访问时 Host 就是 IP，
+#    默认收窄会让用户连自己的后台都进不去（`Invalid host header`），
+#    且必须改 .env 重启才能自救 —— 代价大于收益。
+#
+#    设了值（非 `*`）才启用。用域名部署时建议设上。
 _hosts = [h.strip() for h in (settings.allowed_hosts or "").split(",") if h.strip()]
-if _hosts:
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=_hosts)
-    log.info("Host 白名单: %s", _hosts)
+if _hosts and _hosts != ["*"]:
+    log.info("Host 白名单已启用: %s", _hosts)
+
+    # 🔴 不用 Starlette 的 TrustedHostMiddleware —— 它被拦时只回一句
+    #    裸文本 `Invalid host header`（400），既不说为什么也不说怎么改。
+    #    而且它是在**中间件层直接返回**的，不抛异常，所以
+    #    `@app.exception_handler(400)` 根本收不到，无法事后补提示。
+    #    自己写一个：匹配逻辑一致（支持 `*.example.com` 子域通配），
+    #    但拦截时把「当前 Host / 白名单 / 改法」一并返回，让用户能自救。
+    import re as _re
+
+    _host_pats = []
+    for _p in _hosts:
+        if _p == "*":
+            _host_pats.append(_re.compile(r".*"))
+        elif _p.startswith("*."):
+            # `*.example.com` 匹配任意深度的子域，但不匹配裸 example.com
+            # —— 与 Starlette 语义保持一致。
+            _host_pats.append(_re.compile(
+                r"^[^.]+(\.[^.]+)*\." + _re.escape(_p[2:]) + r"$"))
+        else:
+            _host_pats.append(_re.compile(r"^" + _re.escape(_p) + r"$"))
+
+    @app.middleware("http")
+    async def _host_guard(request, call_next):
+        # Host 头可能带端口（`example.com:8000`），比对前剥掉
+        raw = request.headers.get("host", "")
+        host = raw.split(":")[0].lower()
+        if host and not any(p.match(host) for p in _host_pats):
+            from fastapi.responses import JSONResponse as _JSON
+            return _JSON({
+                "error": {
+                    "message": f"Host 头 '{raw}' 不在白名单里",
+                    "type": "invalid_request_error",
+                    "code": "invalid_host_header",
+                    "allowed_hosts": _hosts,
+                    "hint": ("服务启用了 ALLOWED_HOSTS（精确匹配）。"
+                             "把当前访问用的 Host 加进去，"
+                             "或清空 ALLOWED_HOSTS 以关闭校验。"),
+                    "fix": f"编辑 .env → ALLOWED_HOSTS="
+                           f"{','.join(_hosts)},{host}  → 重启服务",
+                }
+            }, status_code=400)
+        return await call_next(request)
 else:
-    log.warning("ALLOWED_HOSTS 为空 —— 已跳过 Host 头校验（存在 DNS rebinding 风险）")
+    log.info("Host 白名单未启用（ALLOWED_HOSTS=*）—— "
+             "主防线为管理密钥校验；绑域名部署时建议设 ALLOWED_HOSTS=你的域名")
 
 # 🔴 CORS：默认不放通配。
 #    `/admin/api/*` 是凭证管理接口（能读 cookie、能删账号），

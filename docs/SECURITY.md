@@ -25,8 +25,21 @@
 
 ## 网络信任边界
 
-- **`X-Forwarded-For`** 仅在 `TRUSTED_PROXIES` 配置时才采信。未配置时一律用真实对端 IP，
-  防止客户端伪造该头绕过限流。
+- **Host 头校验（`ALLOWED_HOSTS`）默认关闭**。它是防 DNS rebinding 的**纵深防御**，
+  不是主防线 —— 真正拦住未授权访问的是 `/admin/api/*` 上强制比对的管理密钥。
+
+  为什么默认关：Host 白名单是**精确匹配**，而本服务最常见的部署方式是 IP 直连。
+  一旦配了又没把访问用的 IP 写进去，用户会收到 `Invalid host header`，
+  **连自己的后台都进不去**，且必须改 `.env` 重启才能自救。
+
+  用**域名**部署（反代终结 TLS）时建议开启：`ALLOWED_HOSTS=your.domain`，
+  支持 `*.your.domain` 子域通配。若还要用 IP 访问，把 IP 也列进去。
+
+  被拦时响应是 JSON，含 `allowed_hosts` 与可直接照抄的 `fix` 字段 ——
+  不让人对着四个单词的错误猜。
+
+- **`X-Forwarded-For`** 仅在 `TRUSTED_PROXIES` 配置时才采信。未配置时一律用真实对端
+  IP，防止客户端伪造该头绕过限流。
 - **服务端不提供 HTTPS**，请用反代终结 TLS。
 - 管理端无内建账号体系 —— 密钥即身份。**暴露公网前必须额外加一层基础认证**（见 README）。
 

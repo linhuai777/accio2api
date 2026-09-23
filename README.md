@@ -182,7 +182,7 @@ curl -X POST http://localhost:8000/admin/api/register/batch \
 | `ADMIN_KEY` | 登录 `/admin` 的密钥。不设则首次启动自动生成到 `data/.admin_key` |
 | `SECRET_KEY` | 凭证加密主密钥。**务必单独备份**，丢了已存账号全部不可恢复 |
 | `OTP_BACKEND` | `cloudmail` / `imap` / `manual`，见 [docs/EMAIL.md](docs/EMAIL.md) |
-| `ALLOWED_HOSTS` | Host 白名单，公网部署时设为你的域名 |
+| `ALLOWED_HOSTS` | Host 头白名单（防 DNS rebinding）。**默认不启用**；绑域名部署时设为你的域名，支持 `*.your.domain` |
 | `RATE_LIMIT_ENABLED` | 限流开关，默认 `true` |
 
 > 已存在的环境变量优先级高于 `.env` —— `API_KEY=xxx docker compose up` 可临时压过配置文件。

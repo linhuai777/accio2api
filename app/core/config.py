@@ -124,9 +124,25 @@ class Settings:
     # CORS 白名单（逗号分隔）。留空 = 不启用 CORS（同源部署够用）。
     # 需要跨域访问管理端时显式配置，不要用 "*"。
     admin_origins: str = field(default_factory=lambda: _env("ADMIN_ORIGINS"))
-    # 🔴 Host 头白名单（防 DNS rebinding）。默认仅本机；生产显式填域名。
+    # Host 头白名单（防 DNS rebinding 的**纵深防御**，不是主防线）。
+    #
+    # 🔴 默认 `*`（不校验）。为什么不用「localhost,127.0.0.1」做默认：
+    #    本服务最常见的部署方式是「局域网/公网 IP 直连」，而 Host 白名单是
+    #    **精确匹配**——用 IP 访问时 Host 是 `1.2.3.4`，不在白名单里就返回
+    #    `Invalid host header`，用户连自己的后台都进不去，且必须改 .env
+    #    重启服务才能自救。把「安全增强项」做成「默认把人锁在门外」，
+    #    净效果是负的。
+    #
+    #    真正拦截未授权访问的是 `_admin_guard`（每个 /admin/api/* 都强制
+    #    恒定时间比对的密钥）。DNS rebinding 即使成功，攻击者 JS 也拿不到
+    #    管理密钥，读不到数据。Host 白名单只在「密钥已泄露 + 存在 rebinding
+    #    通道」时才提供额外价值——那是很窄的场景。
+    #
+    # 什么时候该设：服务绑在**域名**后面（反代终结 TLS）时，
+    #    设 `ALLOWED_HOSTS=your.domain`（支持 `*.your.domain` 子域通配）。
+    #    只用 IP 访问就别设，或者把 IP 一起写进去。
     allowed_hosts: str = field(
-        default_factory=lambda: _env("ALLOWED_HOSTS", "localhost,127.0.0.1"))
+        default_factory=lambda: _env("ALLOWED_HOSTS", "*"))
     # 可信反代 IP / CIDR 列表（逗号分隔）。**仅当**直连来源落在此列表内，
     # 才采信 X-Forwarded-For / X-Real-IP 判定客户端 IP；否则一律用 socket
     # 对端地址。留空 = 不信任何转发头（默认，最安全）。

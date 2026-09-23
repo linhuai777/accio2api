@@ -306,10 +306,20 @@ def build_env(c: dict) -> str:
 
     if c["domain"]:
         a("# ── 公网访问 ──────────────────────────────────────────")
-        a("# Host 白名单：防 DNS rebinding（见 main.py 的注释）")
-        a(f"ALLOWED_HOSTS=localhost,127.0.0.1,{c['domain']}")
+        a(f"# 允许的 Host 头（防 DNS rebinding 的纵深防御）。")
+        a(f"# ⚠️ 这是精确匹配：不在列表里的 Host 会收到 'Invalid host header'。")
+        a(f"#    如果你还会用 IP 访问，把 IP 一起加进来，否则进不去后台。")
+        a(f"ALLOWED_HOSTS={c['domain']},www.{c['domain']},localhost,127.0.0.1"
+          + (f",{c['ip']}" if c.get("ip") else ""))
         a("# 跨域白名单：管理端需要跨域访问时才填")
         a(f"ADMIN_ORIGINS=https://{c['domain']}")
+        a("")
+    else:
+        a("# ── 公网 / Host 校验 ─────────────────────────────────")
+        a("# ALLOWED_HOSTS 留空（=*）不启用 Host 校验。")
+        a("# 主防线是管理密钥；绑域名部署时再设成你的域名。")
+        a("# ⚠️ 一旦设了就是精确匹配，用 IP 访问会 400，记得把 IP 也写进去。")
+        a("ALLOWED_HOSTS=")
         a("")
 
     a("# ── 速率限制 ──────────────────────────────────────────")
@@ -428,15 +438,20 @@ def main() -> int:
         c["mail_primary"] = c["alias_domain"] = ""
 
     # ── 公网 ──────────────────────────────────────────────
-    section("是否暴露到公网")
-    print(dim("   选「是」会配好 Host 白名单与跨域白名单，并提醒你加鉴权。"))
+    section("访问方式")
+    print(dim("   只用 IP 访问（如 http://192.168.1.10:8000）→ 直接回车跳过。"))
+    print(dim("   有域名（反代终结 TLS）→ 填域名，会顺带配好 Host 白名单。"))
     if args.yes:
         c["domain"] = ""
-    elif ask_yesno("要给公网访问？", default=False):
-        c["domain"] = ask("域名", hint="只填域名，不带 https://，例如 api.example.com",
-                          validate=v_domain)
     else:
-        c["domain"] = ""
+        c["domain"] = ask("域名", default="",
+                          hint="只填域名不带 https://；没有域名就直接回车",
+                          validate=lambda s: "" if not s else v_domain(s))
+    c["ip"] = ""
+    if c["domain"] and not args.yes:
+        c["ip"] = ask("服务器 IP", default="",
+                      hint="还会用 IP 访问的话填上，否则用 IP 打开会报 Invalid host header",
+                      validate=lambda s: "" if not s else v_required(s))
 
     # ── 回顾 ──────────────────────────────────────────────
     section("确认")
@@ -446,7 +461,9 @@ def main() -> int:
         "ADMIN_KEY": "自动生成" if not c["admin_key"] else mask(c["admin_key"]),
         "取码方式": c["otp"],
         "别名池": ("是" if c["alias"] else "否"),
-        "公网": (f"https://{c['domain']}" if c["domain"] else "仅本机访问"),
+        "访问方式": (f"https://{c['domain']}"
+                     + (f" + IP {c['ip']}" if c["ip"] else "")
+                     if c["domain"] else "IP / 任意 Host（不限制）"),
     }
     for k, v in rows.items():
         print(f"  {dim(k.ljust(10))} {v}")
