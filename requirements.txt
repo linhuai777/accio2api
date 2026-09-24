@@ -1,10 +1,11 @@
-fastapi>=0.110.0
+﻿fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 requests>=2.31.0
 websocket-client>=1.7.0
 cryptography>=42.0.0
 playwright>=1.40.0
 python-multipart>=0.0.9
+qrcode>=7.4        # 授权登录：管理后台展示「扫码打开登录页」二维码
 
 # ── 安全下限（pip-audit 2026-09-23 扫描结果）──────────────────
 # anyio 是 FastAPI/Starlette 的传递依赖，4.12.1 存在 2 个已知 CVE：

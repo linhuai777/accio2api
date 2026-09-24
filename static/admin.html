@@ -695,7 +695,7 @@ button.sm{padding:5px 11px;font-size:11.5px}
         <span class="nav-ico">▦</span><span>凭证池</span>
         <em class="nav-badge" id="navCredBadge">–</em></button>
       <button data-tab="t2" onclick="tab('t2')">
-        <span class="nav-ico">◫</span><span>网页登录</span></button>
+        <span class="nav-ico">◫</span><span>授权登录</span></button>
       <button data-tab="t3" onclick="tab('t3')">
         <span class="nav-ico">◈</span><span>自动注册</span></button>
       <button data-tab="t4" onclick="tab('t4')">
@@ -861,25 +861,57 @@ button.sm{padding:5px 11px;font-size:11.5px}
     <div class="hint" id="credEmpty">暂无凭证 —— 用「网页登录」或「粘贴 Cookie」添加。</div>
   </div>
 
-  <!-- ── ② 网页登录 ── -->
+  <!-- ── ② 授权登录（OAuth 形态）── -->
   <div class="card glass hide" id="t2">
-    <h2><span class="ico">🖥</span>网页内登录</h2>
-    <p class="desc">服务器拉起真实浏览器，画面实时推送到这里。直接在下图上操作即可，
-      登录成功后自动入库。</p>
-    <label>登录邮箱（可选，仅作记录）</label>
-    <input id="loginEmail" placeholder="you@example.com" style="max-width:420px">
+    <h2><span class="ico">🔗</span>授权登录</h2>
+    <p class="desc">生成授权链接发给要登录的人（手机/电脑都行）。对方打开后
+      就是官方登录页，登录成功瞬间<b>自动</b>完成校验入库——
+      对方手机上会直接显示「授权成功」，无需任何额外操作。</p>
+
     <div class="row" style="margin-top:14px">
-      <button class="primary" onclick="startLogin()" id="btnStart">开始登录</button>
-      <button class="ghost" onclick="cancelLogin()" id="btnCancel" disabled>取消</button>
-      <span class="chip" id="loginStageChip">未开始</span>
+      <button class="primary" onclick="bridgeCreate()" id="btnBridge">发起授权</button>
+      <button class="ghost hide" onclick="bridgeCancel()" id="btnBridgeCancel">作废此链接</button>
+      <span class="chip" id="bridgeStage">未发起</span>
     </div>
-    <div id="loginBox" class="hide">
-      <div id="screenWrap">
-        <img id="screen" alt="登录画面" draggable="false" tabindex="0">
-        <div class="screen-hint">在此操作鼠标与键盘 · 拖动滑块请按住并平滑移动</div>
+
+    <div id="bridgeBox" class="hide" style="margin-top:16px">
+      <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+        <img id="bridgeQr" alt="授权二维码" draggable="false"
+             style="width:148px;height:148px;border-radius:12px;background:#fff;padding:8px;box-shadow:0 4px 24px rgba(0,0,0,.4)">
+        <div style="flex:1;min-width:240px">
+          <label>授权链接（发给对方，微信/Telegram 均可）</label>
+          <div class="row" style="margin-top:4px">
+            <input id="bridgeUrl" readonly style="flex:1;min-width:200px;font-size:12px">
+            <button class="ghost sm" onclick="copyBridgeUrl()">复制</button>
+          </div>
+          <div class="hint" style="margin-top:10px">
+            二维码供手机扫码直达。链接 10 分钟内有效；登录完成后自动失效。
+          </div>
+          <div class="log" id="bridgeLog" style="margin-top:10px"></div>
+        </div>
       </div>
     </div>
-    <div class="log" id="loginLog"></div>
+
+    <details style="margin-top:18px">
+      <summary style="cursor:pointer;color:#9aa3b2;font-size:13px">
+        服务器浏览器模式（备用：画面推送到此页，鼠标键盘远程操控）</summary>
+      <div style="margin-top:12px">
+        <label>登录邮箱（可选，仅作记录）</label>
+        <input id="loginEmail" placeholder="you@example.com" style="max-width:420px">
+        <div class="row" style="margin-top:14px">
+          <button class="ghost" onclick="startLogin()" id="btnStart">开始登录</button>
+          <button class="ghost" onclick="cancelLogin()" id="btnCancel" disabled>取消</button>
+          <span class="chip" id="loginStageChip">未开始</span>
+        </div>
+        <div id="loginBox" class="hide">
+          <div id="screenWrap">
+            <img id="screen" alt="登录画面" draggable="false" tabindex="0">
+            <div class="screen-hint">在此操作鼠标与键盘 · 拖动滑块请按住并平滑移动</div>
+          </div>
+        </div>
+        <div class="log" id="loginLog"></div>
+      </div>
+    </details>
   </div>
 
   <!-- ── ③ 自动注册 ── -->
@@ -1103,7 +1135,7 @@ async function ping(){
 const PAGES = {
   t0:['总览','运行状态一览'],
   t1:['凭证池','账号凭证与出口绑定'],
-  t2:['网页登录','服务器浏览器实时操控'],
+  t2:['授权登录','链接发给对方 · 登录后自动入库'],
   t3:['自动注册','过验证 + 自动收码'],
   t4:['粘贴 Cookie','手动导入凭证'],
   t5:['代理 / IP','出口池与动态轮换'],
@@ -1615,7 +1647,89 @@ async function delCred(k){
 }
 
 /* ══════════════════════════════════════════════════════════
-   网页登录
+   授权登录（OAuth 形态）：发起 → 展示链接/二维码 → 轮询 → 自动入库
+   ══════════════════════════════════════════════════════════ */
+let BRIDGE_ID = null, bridgeTimer = null;
+
+async function bridgeCreate(){
+  $('btnBridge').disabled = true;
+  const r = await api('/admin/api/login-bridge', {method:'POST'});
+  const j = await r.json().catch(()=>({}));
+  $('btnBridge').disabled = false;
+  if(!r.ok) return toast('发起失败：' + (j.detail?.error?.message || r.status), 'err');
+  BRIDGE_ID = j.data.bridge_id;
+  $('bridgeBox').classList.remove('hide');
+  $('btnBridgeCancel').classList.remove('hide');
+  $('bridgeUrl').value = j.url;
+  $('bridgeStage').textContent = '等待对方打开…';
+  // 二维码由服务端生成（data URI，零浏览器端依赖）
+  if(j.qr){ $('bridgeQr').src = j.qr; }
+  else{ $('bridgeQr').style.display = 'none'; }
+  log('bridgeLog', '授权链接已生成，发给对方即可', 'ok');
+  log('bridgeLog', '对方登录成功后会自动保存，这里自动刷新', '');
+  if(bridgeTimer) clearInterval(bridgeTimer);
+  bridgeTimer = setInterval(pollBridge, 2500);
+}
+
+function copyBridgeUrl(){
+  const u = $('bridgeUrl').value;
+  (navigator.clipboard ? navigator.clipboard.writeText(u) :
+    Promise.reject()).then(()=>toast('已复制','ok'))
+    .catch(()=>{ // 剪贴板 API 不可用（http 部署）→ 选中兜底
+      $('bridgeUrl').select();
+      try{ document.execCommand('copy'); toast('已复制','ok'); }
+      catch(_){ toast('请长按输入框手动复制','err'); }
+    });
+}
+
+async function pollBridge(){
+  if(!BRIDGE_ID) return;
+  let j;
+  try{
+    const r = await fetch(`/admin/api/login-bridge/status?bridge_id=${BRIDGE_ID}`,
+                          {cache:'no-store'});
+    j = await r.json().catch(()=>({}));
+  }catch(e){ return; }                     // 网络抖动：下轮再试
+  const d = j.data || j;
+  if(j.detail){                             // 404 = 桥已过期/已关闭
+    clearInterval(bridgeTimer); bridgeTimer = null;
+    $('bridgeStage').textContent = '链接已失效';
+    log('bridgeLog', '授权链接已过期或已作废', 'err');
+    return;
+  }
+  if(d.done && d.saved_cred && d.saved_cred.account_key){
+    clearInterval(bridgeTimer); bridgeTimer = null;
+    $('bridgeStage').textContent = '✅ 已入库';
+    log('bridgeLog', '✅ 授权成功：' + (d.saved_cred.nickname ||
+        d.saved_cred.email || d.saved_cred.user_id), 'ok');
+    toast('对方授权成功，凭证已入库', 'ok');
+    BRIDGE_ID = null;
+    loadCreds();                            // 凭证池自动刷新
+    setTimeout(()=>{ $('bridgeBox').classList.add('hide');
+                     $('btnBridgeCancel').classList.add('hide');
+                     $('bridgeStage').textContent = '未发起'; }, 6000);
+    return;
+  }
+  if(d.saving){ $('bridgeStage').textContent = '正在校验登录态…'; return; }
+  if(d.save_error){ $('bridgeStage').textContent = '校验未通过，重试中…'; return; }
+  if(d.ready){ $('bridgeStage').textContent = `已检测到登录（${d.cookie_count} cookies）…`;
+               return; }
+  if(d.cookie_count > 0)
+    $('bridgeStage').textContent = `对方已打开页面（${d.cookie_count} cookies）`;
+}
+
+async function bridgeCancel(){
+  if(!BRIDGE_ID) return;
+  await api(`/admin/api/login-bridge/${BRIDGE_ID}`, {method:'DELETE'});
+  clearInterval(bridgeTimer); bridgeTimer = null; BRIDGE_ID = null;
+  $('bridgeBox').classList.add('hide');
+  $('btnBridgeCancel').classList.add('hide');
+  $('bridgeStage').textContent = '未发起';
+  toast('授权链接已作废，截获数据已丢弃', 'ok');
+}
+
+/* ══════════════════════════════════════════════════════════
+   网页登录（服务器浏览器，备用）
    ══════════════════════════════════════════════════════════ */
 let LOGIN_ID = null, screenTimer = null, pollTimer = null;
 

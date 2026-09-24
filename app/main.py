@@ -127,6 +127,9 @@ else:
 
 app.include_router(openai_api.router)
 app.include_router(admin_api.router)
+# 网页登录桥：用户自己浏览器直连官方登录页（反代），手机端可用的凭证添加方式
+from .auth.login_bridge import router as login_bridge_router
+app.include_router(login_bridge_router)
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 
