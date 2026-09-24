@@ -24,3 +24,7 @@ audit/
 .watchdog.pid
 watchdog.pid
 *.pid
+
+# 本机试验场：一次性尝试脚本与测试数据
+tryouts/
+data/

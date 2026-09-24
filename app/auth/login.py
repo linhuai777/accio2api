@@ -53,24 +53,27 @@ def detect_slider(frame) -> dict | None:
 
 
 def frame_offset(page, frame) -> tuple[float, float]:
-    """iframe 在顶层视口中的偏移 —— 见模块顶部要点 2。"""
+    """iframe 在顶层视口中的偏移 —— 见模块顶部要点 2。
+
+    🔴 2026-09-24 修复三层嵌套双重叠加：Playwright 的
+    ElementHandle.bounding_box() 本身就返回**相对主视口**的坐标（文档
+    明示），对 frame_element 取一次 box 即已包含全部祖先 iframe 偏移。
+    旧实现沿 parent_frame 链逐层累加，两层场景（punish 直接嵌在主页）
+    恰好只加一次所以没炸；三层场景（桥内页 → punish iframe）中间层被
+    加两次，拖动坐标系统性偏移 → 滑块从未被真正抓住（实测文案纹丝不动）。
+    """
     if frame == page.main_frame:
         return 0.0, 0.0
-    ox = oy = 0.0
-    cur = frame
-    while cur is not None and cur != page.main_frame:
-        try:
-            el = cur.frame_element()
-            if el is None:
-                break
-            box = el.bounding_box()
-            if box:
-                ox += box["x"]
-                oy += box["y"]
-            cur = cur.parent_frame
-        except Exception:
-            break
-    return ox, oy
+    try:
+        el = frame.frame_element()
+        if el is None:
+            return 0.0, 0.0
+        box = el.bounding_box()
+        if box:
+            return box["x"], box["y"]
+    except Exception:
+        pass
+    return 0.0, 0.0
 
 
 def _bezier_drag(page, x0, y0, x1, y1, steps, wobble=1.6):
