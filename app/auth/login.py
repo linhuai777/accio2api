@@ -11,6 +11,8 @@
      不换算的话鼠标点在 iframe 外面 —— **滑块纹丝不动，且不报错**。
   3. 拖动要**拟人**：贝塞尔曲线 + ease-out + 垂直微抖 + 不均匀步间延时。
      一步到位必被风控拒。
+     ⚠️ 2026-09-23 实测：上面的贝塞尔版连续 3 次全败（无头 1 + 有头 2），
+     轨迹/步频特征被判 bot；改用**人肉节奏**（见 `_human_drag`）后一次通过。
 """
 
 from __future__ import annotations
@@ -72,7 +74,11 @@ def frame_offset(page, frame) -> tuple[float, float]:
 
 
 def _bezier_drag(page, x0, y0, x1, y1, steps, wobble=1.6):
-    """贝塞尔拟人拖动。步间延时**是风控评估的信号本身**，不要图快去掉。"""
+    """贝塞尔拟人拖动（已弃用，保留备用）。
+
+    ⚠️ 2026-09-23 实测被 Baxia 判 bot：24~80 步 ease-out + 正弦变速步频
+    连续 3 次全败。生产路径已换 `_human_drag`，此函数仅存档。
+    """
     dx, dy = x1 - x0, y1 - y0
     if math.hypot(dx, dy) < 1.0:
         return
@@ -91,15 +97,40 @@ def _bezier_drag(page, x0, y0, x1, y1, steps, wobble=1.6):
         time.sleep((base + random.uniform(-3, 6)) / 1000.0)
 
 
+def _human_drag(page, x0: float, y0: float, x1: float, y1: float, steps: int = 40):
+    """人肉节奏拖动 —— 2026-09-23 实测一次通过（贝塞尔版 3 连败后的替换者）。
+
+    与贝塞尔版的本质差异（风控看的就是这些信号）：
+      1. **匀速慢节奏**：固定步数 40 步 × 18ms 均匀步频，总时长 ~0.7s，
+         不做 ease-out 加速 —— 机器爱加速，人手是近似匀速的小幅抖动；
+      2. **毫米级垂直抖动**：±0.5px 的 y 向微颤（i%3-1 三值循环），
+         模拟手指握持不稳，贝塞尔版 ±1.6px 的"拟人弧线"反而太光滑；
+      3. **起手与按下有停顿**：move 到把手后停 0.4s、mouse.down 后停 0.3s，
+         是真人「看到滑块→伸手→按住→拖」的反应链，机器没有。
+    """
+    n = max(24, min(60, steps))
+    for i in range(1, n + 1):
+        page.mouse.move(x0 + (x1 - x0) * i / n, y0 + (i % 3 - 1) * 0.5)
+        time.sleep(0.018)
+
+
 def solve_slider(frame, page, *, max_tries: int = 3) -> bool:
-    """拖动 NC 滑块至通过。返回是否检测到通过信号。"""
+    """拖动 NC 滑块至通过。返回是否通过。
+
+    「滑块消失」= 通过：验证码 iframe 在验证完成后会被风控端拆除，
+    这是它消失的唯一正常原因；循环开头发现滑块不在同理（无事可做，
+    或已被同流程上一次拖动解决）。
+    🔴 2026-09-24 修复假阴性：此前「拖动成功 → 下轮循环滑块已消失 →
+       return False」，调用方拿到失败而实际已通过（实测复现：
+       验证码正常下发、登录成功，函数却报 False）。
+    """
     for _ in range(max_tries):
         info = detect_slider(frame)
         if not info:
             time.sleep(1.0)
             info = detect_slider(frame)
             if not info:
-                return False
+                return True   # 滑块不在 = 无滑块可解（含已通过的拆框态）
         hb, tb = info["handle"], info["track"]
         ox, oy = frame_offset(page, frame)         # ⭐ 必须换算
         sx = ox + hb["x"] + hb["w"] / 2
@@ -111,15 +142,12 @@ def solve_slider(frame, page, *, max_tries: int = 3) -> bool:
         page.mouse.move(sx + random.uniform(-30, 30), sy + random.uniform(-14, 14))
         time.sleep(random.uniform(0.15, 0.35))
         page.mouse.move(sx + random.uniform(-3, 3), sy, steps=random.randint(4, 8))
-        time.sleep(random.uniform(0.08, 0.22))
+        time.sleep(random.uniform(0.4, 0.6))      # 起手停顿（实测 0.4s 关键值）
         page.mouse.down()
-        time.sleep(random.uniform(0.06, 0.14))
-        steps = max(24, min(80, int(abs(ex - sx) / 3.5)))
-        _bezier_drag(page, sx, sy, ex, ey, steps)
-        time.sleep(random.uniform(0.08, 0.20))
-        page.mouse.move(ex - over * random.uniform(0.4, 0.9),
-                        ey + random.uniform(-0.8, 0.8), steps=random.randint(3, 7))
-        time.sleep(random.uniform(0.10, 0.28))
+        time.sleep(random.uniform(0.3, 0.45))     # 按下停顿（实测 0.3s 关键值）
+        # 🔴 生产路径用 _human_drag：贝塞尔版实测 3 连败被判 bot（2026-09-23）
+        _human_drag(page, sx, sy, ex, ey)
+        time.sleep(random.uniform(0.3, 0.45))     # 拖完停顿，松手前人手会顿一下
         page.mouse.up()
 
         time.sleep(random.uniform(1.2, 2.2))
